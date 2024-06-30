@@ -3,6 +3,7 @@ OBJECTS= \
 	./build/cprocess.o \
 	./build/lex_process.o \
 	./build/lexer.o \
+	./build/token.o \
 	./build/helpers/buffer.o \
 	./build/helpers/vector.o
 
@@ -23,6 +24,9 @@ all: ${OBJECTS}
 
 ./build/lexer.o: ./lexer.c
 	gcc lexer.c ${INCCLUDES} -o ./build/lexer.o -g -c
+
+./build/token.o: ./token.c
+	gcc token.c ${INCCLUDES} -o ./build/token.o -g -c
 
 ./build/helpers/buffer.o: ./helpers/buffer.c
 	gcc ./helpers/buffer.c ${INCCLUDES} -o ./build/helpers/buffer.o -g -c

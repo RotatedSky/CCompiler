@@ -3,15 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-compile_process_s *compile_process_create(const char *filename, const char* filename_out, int flags)
+compile_process_s *compile_process_create(const char *filename, const char *filename_out, int flags)
 {
-    FILE* fp = fopen(filename, "r");
+    FILE *fp = fopen(filename, "r");
     if (NULL == fp)
     {
         return NULL;
     }
 
-    FILE* fp_out = NULL;
+    FILE *fp_out = NULL;
     if (filename_out != NULL)
     {
         fp_out = fopen(filename_out, "w");

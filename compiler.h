@@ -3,6 +3,51 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
+
+#define S_EQ(str, str2) \
+    ((str) && (str2) && strcmp(str, str2) == 0)
+
+#define NUMERIC_CASE \
+    case '0':        \
+    case '1':        \
+    case '2':        \
+    case '3':        \
+    case '4':        \
+    case '5':        \
+    case '6':        \
+    case '7':        \
+    case '8':        \
+    case '9'
+
+#define OPERATOR_CASE_EXCLUDING_DIVISION \
+    case '+':                            \
+    case '-':                            \
+    case '*':                            \
+    case '>':                            \
+    case '<':                            \
+    case '^':                            \
+    case '%':                            \
+    case '!':                            \
+    case '=':                            \
+    case '~':                            \
+    case '|':                            \
+    case '&':                            \
+    case '(':                            \
+    case '[':                            \
+    case ',':                            \
+    case '.':                            \
+    case '?'
+
+#define SYMBOL_CASE \
+    case '{':       \
+    case '}':       \
+    case ':':       \
+    case ';':       \
+    case '#':       \
+    case '\\':      \
+    case ')':       \
+    case ']'
 
 typedef struct _pos_s
 {
@@ -27,6 +72,7 @@ typedef struct _token_s
 {
     int type;
     int flags;
+    pos_s pos;
 
     union
     {
@@ -98,16 +144,21 @@ typedef struct _lex_process_s
 } lex_process_s;
 
 int compile_file(const char *filename, const char *out_filename, int flags);
-compile_process_s *compile_process_create(const char *filename, const char* filename_out, int flags);
+compile_process_s *compile_process_create(const char *filename, const char *filename_out, int flags);
 
 char compile_process_next_char(lex_process_s *lex_process);
 char compile_process_peek_char(lex_process_s *lex_process);
 void compile_process_push_char(lex_process_s *lex_process, char c);
+
+void compile_error(compile_process_s *compiler, const char *msg, ...);
+void compile_warning(compile_process_s *compiler, const char *msg, ...);
 
 lex_process_s *lex_process_create(compile_process_s *compiler, lex_process_functions *functions, void *private);
 void lex_process_free(lex_process_s *process);
 void *lex_process_private(lex_process_s *process);
 vector_s *lex_process_tokens(lex_process_s *process);
 int lex(lex_process_s *process);
+
+bool token_is_keyword(token_s *token, const char *value);
 
 #endif // !__CCOMPILER_H__
