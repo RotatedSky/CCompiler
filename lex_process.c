@@ -2,7 +2,7 @@
 #include "helpers/vector.h"
 #include <stdlib.h>
 
-lex_process_s *lex_process_create(compile_process_s *compiler, lex_process_functions *functions, void *private)
+lex_process_s *lex_process_create(compile_process_s *compiler, lex_process_functions_s *functions, void *private)
 {
     lex_process_s *process = calloc(1, sizeof(lex_process_s));
     process->function = functions;

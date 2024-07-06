@@ -16,6 +16,8 @@ static lex_process_s *lex_process;
 static token_s tmp_token;
 
 token_s *read_next_token();
+token_s *token_make_identifier_or_keyword();
+static bool _lex_is_in_expression();
 
 static char peekc()
 {
@@ -25,6 +27,10 @@ static char peekc()
 static char nextc()
 {
     char c = lex_process->function->next_char(lex_process);
+    if (_lex_is_in_expression())
+    {
+        buffer_write(lex_process->parentheses_buffer, c);
+    }
     lex_process->pos.col += 1;
     if (c == '\n')
     {
@@ -55,6 +61,10 @@ token_s *token_create(token_s *_token)
 {
     memcpy(&tmp_token, _token, sizeof(token_s));
     tmp_token.pos = _lex_file_position();
+    if (_lex_is_in_expression())
+    {
+        tmp_token.between_brackets = buffer_ptr(lex_process->parentheses_buffer);
+    }
     return &tmp_token;
 }
 
@@ -91,14 +101,116 @@ unsigned long long read_number()
     return atoll(s);
 }
 
+token_number_type_e lexer_number_type(char c)
+{
+    token_number_type_e res = NUMBER_TYPE_NORMAL;
+    c = tolower(c);
+    if (c == 'l')
+    {
+        res = NUMBER_TYPE_LONG;
+    }
+    else if (c == 'f')
+    {
+        res = NUMBER_TYPE_FLOAT;
+    }
+    return res;
+}
+
 token_s *token_make_number_for_value(unsigned long long number)
 {
-    return token_create(&(token_s){.type = TOKEN_TYPE_NUMBER, .llnum = number});
+    token_number_type_e number_type = lexer_number_type((peekc()));
+    if (number_type != NUMBER_TYPE_NORMAL)
+    {
+        nextc();
+    }
+    return token_create(&(token_s){.type = TOKEN_TYPE_NUMBER, .llnum = number, .num.type = number_type});
 }
 
 token_s *token_make_number()
 {
     return token_make_number_for_value(read_number());
+}
+
+void lexer_pop_token()
+{
+    vector_pop(lex_process->token_vec);
+}
+
+bool is_hex_char(char c)
+{
+    c = tolower(c);
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+}
+
+const char *read_hex_number_str()
+{
+    buffer_s *buf = buffer_create();
+    char c = peekc();
+    LEX_GETC_IF(buf, c, is_hex_char(c));
+    // Write our null terminator
+    buffer_write(buf, 0x00);
+    return buffer_ptr(buf);
+}
+
+token_s *token_make_special_number_hexadecimal()
+{
+    // Skip the 'x'
+    nextc();
+
+    unsigned long number = 0;
+    const char *number_str = read_hex_number_str();
+    number = strtoll(number_str, 0, 16);
+    return token_make_number_for_value(number);
+}
+
+void lexer_validate_binary_string(const char *str)
+{
+    size_t len = strlen(str);
+    for (size_t i = 0; i < len; i++)
+    {
+        if (str[i] != '0' && str[i] != '1')
+        {
+            compile_error(lex_process->compiler, "This is not a valid binary number\n");
+        }
+    }
+}
+
+token_s *token_make_special_number_binary()
+{
+    // Skip the 'b'
+    nextc();
+
+    unsigned long number = 0;
+    const char *number_str = read_number_str();
+    lexer_validate_binary_string(number_str);
+    number = strtoll(number_str, 0, 2);
+    return token_make_number_for_value(number);
+}
+
+token_s *token_make_special_number()
+{
+    token_s *token = NULL;
+    token_s *last_token = lexer_last_token();
+
+    // Such as "x50", it's not a special number.
+    if (NULL == last_token || !(last_token->type == TOKEN_TYPE_NUMBER && last_token->llnum == 0))
+    {
+        return token_make_identifier_or_keyword();
+    }
+
+    lexer_pop_token();
+
+    char c = peekc();
+    if (c == 'x')
+    {
+        token = token_make_special_number_hexadecimal();
+    }
+    else if (c == 'b')
+    {
+        token = token_make_special_number_binary();
+    }
+
+    return token;
 }
 
 token_s *token_make_string(char start_delim, char end_delim)
@@ -489,7 +601,12 @@ token_s *read_next_token()
     SYMBOL_CASE:
         token = token_make_symbol();
         break;
-    
+
+    case 'b':
+    case 'x':
+        token = token_make_special_number();
+        break;
+
     case '"':
         token = token_make_string('"', '"');
         break;
@@ -537,4 +654,47 @@ int lex(lex_process_s *process)
     }
 
     return LEXICAL_ANALYSIS_ALL_OK;
+}
+
+char lexer_string_buffer_next_char(lex_process_s *process)
+{
+    buffer_s *buf = lex_process_private(process);
+    return buffer_read(buf);
+}
+
+char lexer_string_buffer_peek_char(lex_process_s *process)
+{
+    buffer_s *buf = lex_process_private(process);
+    return buffer_peek(buf);
+}
+
+void lexer_string_buffer_push_char(lex_process_s *process, char c)
+{
+    buffer_s *buf = lex_process_private(process);
+    buffer_write(buf, c);
+}
+
+lex_process_functions_s lexer_string_buffer_functions =
+{
+    .next_char = lexer_string_buffer_next_char,
+    .peek_char = lexer_string_buffer_peek_char,
+    .push_char = lexer_string_buffer_push_char
+};
+
+lex_process_s *tokens_build_for_string(compile_process_s *compiler, const char *str)
+{
+    buffer_s *buf = buffer_create();
+    buffer_printf(buf, str);
+    lex_process_s *lex_process = lex_process_create(compiler, &lexer_string_buffer_functions, buf);
+    if (NULL == lex_process)
+    {
+        return NULL;
+    }
+
+    if (lex(lex_process) != LEXICAL_ANALYSIS_ALL_OK)
+    {
+        return NULL;
+    }
+
+    return lex_process;
 }
